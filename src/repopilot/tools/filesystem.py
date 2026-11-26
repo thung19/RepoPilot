@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from repopilot.models import SearchResult
+from repopilot.tools.security import validate_path
 
 SOURCE_EXTENSIONS = {
     ".py",
@@ -39,6 +40,15 @@ IGNORED_NAMES = {
     "build",
 }
 
+# Generated directories whose names vary, matched by suffix.
+IGNORED_SUFFIXES = (
+    ".egg-info",
+)
+
+
+def is_ignored(name: str) -> bool:
+    return name in IGNORED_NAMES or name.endswith(IGNORED_SUFFIXES)
+
 def list_directory(path: Path) -> list[Path]:
     if not path.exists():
         raise FileNotFoundError(path)
@@ -48,13 +58,10 @@ def list_directory(path: Path) -> list[Path]:
 
     items = []
     for item in path.iterdir():
-        if item.name not in IGNORED_NAMES and not item.is_symlink():
+        if not is_ignored(item.name) and not item.is_symlink():
             items.append(item)
 
     return sorted(items)
-
-
-from repopilot.tools.security import validate_path
 
 
 def read_file(root: Path, path: Path) -> str:
@@ -95,7 +102,7 @@ def find_files(root: Path, pattern: str) -> list[Path]:
         filtered_dirs = []
 
         for name in dirnames:
-            if name in IGNORED_NAMES:
+            if is_ignored(name):
                 continue
 
             full_path = Path(dirpath) / name
@@ -108,7 +115,7 @@ def find_files(root: Path, pattern: str) -> list[Path]:
         dirnames[:] = filtered_dirs
 
         for filename in filenames:
-            if filename in IGNORED_NAMES:
+            if is_ignored(filename):
                 continue
 
             path = Path(dirpath) / filename

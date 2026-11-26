@@ -5,7 +5,15 @@ from repopilot.models import EntryPoint
 from repopilot.tools.filesystem import (
     find_files,
     read_file,
+    search_code,
 )
+
+# Python web frameworks detected by an actual constructor call such as
+# `app = FastAPI()`. A text search would also match strings and comments.
+PYTHON_APP_CONSTRUCTORS = {
+    "FastAPI": "Possible FastAPI application",
+    "Flask": "Possible Flask application",
+}
 
 
 def is_main_guard(node: ast.AST) -> bool:
@@ -30,6 +38,24 @@ def is_main_guard(node: ast.AST) -> bool:
         and isinstance(test.comparators[0], ast.Constant)
         and test.comparators[0].value == "__main__"
     )
+
+
+def app_constructor_reason(node: ast.AST) -> str | None:
+    """Return a reason if `node` calls FastAPI(...) or Flask(...)."""
+    if not isinstance(node, ast.Call):
+        return None
+
+    func = node.func
+
+    if isinstance(func, ast.Name):
+        name = func.id
+    elif isinstance(func, ast.Attribute):
+        # Handles qualified calls such as fastapi.FastAPI().
+        name = func.attr
+    else:
+        return None
+
+    return PYTHON_APP_CONSTRUCTORS.get(name)
 
 def find_python_entrypoints(
     root: Path
@@ -65,14 +91,24 @@ def find_python_entrypoints(
                     )
                 )
 
+        for node in ast.walk(tree):
+            reason = app_constructor_reason(node)
+
+            if reason is not None:
+                results.append(
+                    EntryPoint(
+                        path=relative_path,
+                        reason=reason,
+                        line_number=node.lineno
+                    )
+                )
+
     return results
 
-from repopilot.tools.filesystem import search_code
 
-
+# Text rules for languages without a parser here. These can still
+# match comments or strings, so they are reported as candidates.
 ENTRYPOINT_RULES = [
-    (".py", "FastAPI(", "Possible FastAPI application"),
-    (".py", "Flask(", "Possible Flask application"),
     (".java", "public static void main", "Java main method"),
     (".go", "func main(", "Go main function"),
     (".rs", "fn main(", "Rust main function"),

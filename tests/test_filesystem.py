@@ -164,3 +164,21 @@ def test_read_file_rejects_env(tmp_path):
 
     with pytest.raises(PermissionError):
         read_file(tmp_path, path)
+
+
+def test_find_files_skips_egg_info(tmp_path):
+    egg = tmp_path / "src" / "pkg.egg-info"
+    egg.mkdir(parents=True)
+    (egg / "PKG-INFO").touch()
+    (tmp_path / "main.py").touch()
+
+    result = find_files(tmp_path, "*")
+
+    assert [p.name for p in result] == ["main.py"]
+
+
+def test_list_directory_skips_egg_info(tmp_path):
+    (tmp_path / "pkg.egg-info").mkdir()
+    (tmp_path / "src").mkdir()
+
+    assert [p.name for p in list_directory(tmp_path)] == ["src"]
